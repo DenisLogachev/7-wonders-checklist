@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Чудеса света — чек-лист</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<style>
+  :root {
+    --bg: #f6f3ee;
+    --card-bg: #ffffff;
+    --text: #2b2620;
+    --text-muted: #7a7168;
+    --accent: #b5813f;
+    --accent-dark: #8a5f28;
+    --border: #e6ded1;
+    --check-bg: #f0e9dc;
+    --done-bg: #eef6ee;
+    --done-border: #a9d3a9;
+    --shadow: rgba(60, 45, 20, 0.08);
+    --gold: #c9a227;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1c1a17;
+      --card-bg: #262320;
+      --text: #ece6db;
+      --text-muted: #a89e8e;
+      --accent: #d6a35c;
+      --accent-dark: #e8b876;
+      --border: #3a352e;
+      --check-bg: #322d26;
+      --done-bg: #223326;
+      --done-border: #3f6b45;
+      --shadow: rgba(0, 0, 0, 0.35);
+      --gold: #e0c04a;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.5;
+    padding: 24px 16px 80px;
+  }
+
+  .wrap { max-width: 760px; margin: 0 auto; }
+  header { text-align: center; margin-bottom: 28px; }
+  h1 {
+    font-size: clamp(24px, 5vw, 34px);
+    margin: 0 0 6px;
+    letter-spacing: 0.5px;
+    color: var(--accent-dark);
+  }
+  .subtitle { color: var(--text-muted); font-size: 15px; font-style: italic; }
+
+  .progress-bar-outer {
+    max-width: 760px; margin: 20px auto 0; background: var(--check-bg);
+    border-radius: 999px; height: 16px; overflow: hidden; border: 1px solid var(--border);
+  }
+  .progress-bar-inner {
+    height: 100%; background: linear-gradient(90deg, var(--gold), var(--accent-dark));
+    width: 0%; transition: width 0.4s ease;
+  }
+  .progress-label { text-align: center; font-size: 14px; color: var(--text-muted); margin-top: 8px; }
+
+  .friends-box {
+    max-width: 760px; margin: 22px auto 0; background: var(--card-bg);
+    border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
+  }
+  .friends-title {
+    font-family: -apple-system, Helvetica, Arial, sans-serif; font-size: 12.5px;
+    text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 10px;
+  }
+  .friend-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+  .friend-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--check-bg); object-fit: cover; }
+  .friend-info { flex: 1; min-width: 0; }
+  .friend-name { font-family: -apple-system, Helvetica, Arial, sans-serif; font-size: 13px; margin-bottom: 3px; }
+  .friend-bar-outer { height: 6px; border-radius: 999px; background: var(--check-bg); overflow: hidden; }
+  .friend-bar-inner { height: 100%; background: var(--gold); }
+  .friend-pct { font-family: -apple-system, Helvetica, Arial, sans-serif; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+
+  .section {
+    margin-top: 36px; border-radius: 14px; border: 1px solid var(--border);
+    background: var(--card-bg); padding: 16px 16px 18px; box-shadow: 0 1px 4px var(--shadow);
+    border-top: 4px solid var(--sec-color, var(--accent));
+  }
+  .section-header { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; flex-wrap: wrap; }
+  .section-badge {
+    width: 38px; height: 38px; min-width: 38px; border-radius: 10px; display: flex;
+    align-items: center; justify-content: center; font-size: 20px;
+    background: color-mix(in srgb, var(--sec-color, var(--accent)) 18%, var(--check-bg));
+    border: 1px solid color-mix(in srgb, var(--sec-color, var(--accent)) 45%, var(--border));
+  }
+  .section-titlewrap { flex: 1; min-width: 0; }
+  .section-title { font-size: 18px; font-weight: bold; color: var(--sec-color, var(--accent-dark)); line-height: 1.2; }
+  .section-count { font-size: 12.5px; color: var(--text-muted); font-family: -apple-system, Helvetica, Arial, sans-serif; margin-top: 2px; }
+  .section-count.complete { color: var(--gold); font-weight: bold; }
+  .section.complete { box-shadow: 0 0 0 2px var(--gold), 0 2px 10px var(--shadow); }
+  .mini-bar-outer { height: 6px; border-radius: 999px; background: var(--check-bg); overflow: hidden; margin-top: 6px; }
+  .mini-bar-inner { height: 100%; background: var(--sec-color, var(--accent)); width: 0%; transition: width 0.35s ease; }
+  .section-desc { font-size: 13px; color: var(--text-muted); margin: 10px 0 12px; font-style: italic; }
+
+  ul.wonder-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+  li.wonder-item { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; transition: background 0.2s ease, border-color 0.2s ease; }
+  li.wonder-item.done {
+    background: color-mix(in srgb, var(--sec-color, var(--accent)) 14%, var(--card-bg));
+    border-color: var(--sec-color, var(--accent));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--sec-color, var(--accent)) 40%, transparent), 0 2px 8px color-mix(in srgb, var(--sec-color, var(--accent)) 25%, transparent);
+  }
+  .wonder-row { display: flex; align-items: flex-start; gap: 12px; padding: 11px 13px; }
+  label.wonder-label { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; font-size: 15px; flex: 1; min-width: 0; }
+  input[type="checkbox"] {
+    appearance: none; -webkit-appearance: none; width: 22px; height: 22px; min-width: 22px;
+    border-radius: 6px; border: 2px solid var(--sec-color, var(--accent)); background: var(--check-bg);
+    cursor: pointer; position: relative; flex-shrink: 0; margin-top: 1px;
+  }
+  input[type="checkbox"]:checked { background: var(--sec-color, var(--accent)); border-color: var(--sec-color, var(--accent-dark)); }
+  input[type="checkbox"]:checked::after {
+    content: "✓"; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -58%);
+    color: white; font-size: 15px; font-weight: bold; font-family: -apple-system, Helvetica, Arial, sans-serif;
+  }
+  .wonder-text { flex: 1; min-width: 0; }
+  .wonder-name { display: block; }
+  .wonder-note {
+    display: block; font-family: -apple-system, Helvetica, Arial, sans-serif; font-size: 12.5px;
+    color: var(--text-muted); margin-top: 3px; font-style: italic; line-height: 1.35;
+  }
+  .wonder-item.done .wonder-name { color: var(--sec-color, var(--accent-dark)); font-weight: bold; }
+  .wonder-item.done .wonder-name::after { content: " ✓"; color: var(--sec-color, var(--accent-dark)); }
+
+  footer { margin-top: 50px; text-align: center; font-size: 13px; color: var(--text-muted); }
+
+  .achievement-toast {
+    position: fixed; left: 50%; bottom: -120px; transform: translateX(-50%);
+    background: linear-gradient(135deg, #2b2620, #40372a); color: #f6e6b8;
+    border: 1px solid var(--gold); border-radius: 14px; padding: 14px 20px;
+    display: flex; align-items: center; gap: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+    z-index: 1000; transition: bottom 0.5s cubic-bezier(.17,.89,.32,1.28); max-width: 90vw;
+    font-family: -apple-system, Helvetica, Arial, sans-serif;
+  }
+  .achievement-toast.show { bottom: 24px; }
+  .achievement-icon { font-size: 30px; }
+  .achievement-text-title { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--gold); margin-bottom: 2px; }
+  .achievement-text-name { font-size: 15px; font-weight: bold; color: #fff; }
+
+  .setup-warning {
+    max-width: 760px; margin: 0 auto 20px; background: #4a1f1f; color: #ffd8d8;
+    border: 1px solid #a33; border-radius: 10px; padding: 12px 16px; font-size: 13px;
+    font-family: -apple-system, Helvetica, Arial, sans-serif; display: none;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Чудеса света</h1>
+    <div class="subtitle">Личный чек-лист посещённых мест</div>
+  </header>
+
+  <div class="setup-warning" id="setupWarning">
+    ⚠️ Firebase не настроен. Впиши свой firebaseConfig в начало &lt;script&gt; — см. инструкцию.
+  </div>
+
+  <div class="progress-bar-outer"><div class="progress-bar-inner" id="progressBar"></div></div>
+  <div class="progress-label" id="progressLabel">0 из 0 отмечено</div>
+
+  <div class="friends-box" id="friendsBox" style="display:none;"></div>
+
+  <div id="sections"></div>
+
+  <footer>Отметки сохраняются в Firebase — доступны с любого устройства.</footer>
+</div>
+
+<div class="achievement-toast" id="achievementToast">
+  <div class="achievement-icon" id="achievementIcon">🏆</div>
+  <div>
+    <div class="achievement-text-title">Достижение открыто</div>
+    <div class="achievement-text-name" id="achievementName">Категория пройдена!</div>
+  </div>
+</div>
+
+<script>
+const DATA = [
+  {
+    title: "Семь чудес Древнего мира",
+    desc: "Античный канон, III век до н.э.",
+    icon: "🏺",
+    color: "#b5813f",
+    items: [
+      { name: "Пирамиды и Сфинкс Гизы (Египет)", note: "Единственное сохранившееся чудо Античности" },
+      { name: "Висячие сады Семирамиды (Вавилон, Ирак)", note: "Легенда: существование археологически не подтверждено, точное место неизвестно — не учитывается в общем счёте", excludeFromCount: true },
+      { name: "Статуя Зевса Олимпийского (Олимпия, Греция)", note: "Не сохранилась — утрачена в древности" },
+      { name: "Храм Артемиды Эфесской (Турция)", note: "Сохранились только руины и фундамент" },
+      { name: "Мавзолей в Галикарнасе (Турция)", note: "Сохранились только руины; часть скульптур — в Британском музее" },
+      { name: "Колосс Родосский (Греция)", note: "Не сохранился — разрушен землетрясением в 226 г. до н.э." },
+      { name: "Александрия (Египет)", note: "Александрийский маяк (разрушен землетрясениями к XIV в.), Великая Александрийская библиотека (утрачена в древности; современная «Библиотека Александрина», 2002 г. — другое здание) и катакомбы Ком-эль-Шукафа (сохранились, открыты для посещения)" }
+    ]
+  },
+  {
+    title: "Новые семь чудес света",
+    desc: "New7Wonders, голосование 2007 года",
+    icon: "🌍",
+    color: "#3f7cb5",
+    items: [
+      { name: "Великая Китайская стена (Китай)", note: "Крупнейшее фортификационное сооружение в истории" },
+      { name: "Петра (Иордания)", note: "Город, высеченный набатеями в розовых скалах" },
+      { name: "Христос-Искупитель (Рио-де-Жанейро, Бразилия)", note: "Символ Рио-де-Жанейро на вершине горы Корковаду" },
+      { name: "Мачу-Пикчу (Перу)", note: "Город инков в горах, скрытый от мира до 1911 года" },
+      { name: "Чичен-Ица (Мексика)", note: "Главный храмовый комплекс цивилизации майя" },
+      { name: "Колизей (Рим, Италия)", note: "Крупнейший амфитеатр Древнего Рима" },
+      { name: "Тадж-Махал (Индия)", note: "Мавзолей из белого мрамора, символ вечной любви" }
+    ]
+  },
+  {
+    title: "Новые семь чудес природы",
+    desc: "New7Wonders of Nature, 2011 год",
+    icon: "🌿",
+    color: "#4a9d5f",
+    items: [
+      { name: "Амазонка (Южная Америка)", note: "Крупнейший тропический лес и река по объёму воды в мире" },
+      { name: "Бухта Халонг (Вьетнам)", note: "Тысячи известняковых островов в изумрудной воде" },
+      { name: "Игуасу (Аргентина/Бразилия)", note: "Одна из крупнейших систем водопадов в мире" },
+      { name: "Остров Чеджудо (Южная Корея)", note: "Вулканический остров с лавовыми пещерами" },
+      { name: "Подземная река Пуэрто-Принсеса (Филиппины)", note: "Одна из длиннейших судоходных подземных рек в мире" },
+      { name: "Столовая гора (ЮАР)", note: "Плоская вершина, возвышающаяся над Кейптауном" },
+      { name: "Комодо (Индонезия)", note: "Родина драконов Комодо — крупнейших ящериц на Земле" }
+    ]
+  },
+  {
+    title: "Семь чудес Средневековья",
+    icon: "⚔️",
+    color: "#8a3f3f",
+    items: [
+      { name: "Стоунхендж (Великобритания)", note: "Доисторическое каменное кольцо, назначение которого до конца не разгадано" },
+      { name: "Порцелановая башня Нанкина (Нанкин, Китай)", note: "Оригинал разрушен в 1856 г.; в 2015 г. на этом месте построена современная копия" },
+      { name: "Айя-София (Стамбул, Турция)", note: "Храм, побывавший и собором, и мечетью, и музеем" },
+      { name: "Пизанская башня (Пиза, Италия)", note: "Знаменита наклоном из-за неровного фундамента" },
+      { name: "Крак-де-Шевалье (Сирия)", note: "Одна из наиболее сохранившихся крепостей крестоносцев" },
+      { name: "Каркассон (Франция)", note: "Потрясающе сохранившийся укреплённый средневековый город с двойным кольцом крепостных стен" },
+      { name: "Теночтитлан (Мехико, Мексика)", note: "Столица империи ацтеков; сейчас под современным Мехико, частично раскопана как Templo Mayor" }
+    ]
+  },
+  {
+    title: "Топ-7 значимых городов",
+    icon: "🏙️",
+    color: "#6b5b95",
+    items: [
+      { name: "Париж (Франция)", note: "Эйфелева башня, Лувр, Нотр-Дам де Пари и Версальский дворец" },
+      { name: "Лондон (Великобритания)", note: "Биг-Бен и Букингемский дворец" },
+      { name: "Рим (Италия)", note: "Пантеон, Колонна Траяна, а также Ватикан (Сикстинская капелла и собор Святого Петра)" },
+      { name: "Пекин (Китай)", note: "Запретный город и Храм Неба — два ключевых памятника императорского Пекина" },
+      { name: "Москва (Россия)", note: "Московский Кремль и Большой театр — два знаковых памятника в центре города" },
+      { name: "Нью-Йорк (США)", note: "Статуя Свободы, Эмпайр-стейт-билдинг и Бродвей — три знаковых места города" },
+      { name: "Венеция (Италия)", note: "Венецианский арсенал — историческая судоверфь; в основном закрыта для публики, открывается эпизодически" }
+    ]
+  },
+  {
+    title: "Топ-7 живописных регионов",
+    icon: "🍇",
+    color: "#7d4f9e",
+    items: [
+      { name: "Тоскана (Италия)", note: "Холмы, виноградники, средневековые городки" },
+      { name: "Прованс (Франция)", note: "Лавандовые поля, свет для художников" },
+      { name: "Патагония (Чили/Аргентина)", note: "Ледники, горы, край света" },
+      { name: "Долина Луары (Франция)", note: "Сотни замков вдоль реки, «сад Франции»" },
+      { name: "Швейцарские Альпы (Швейцария)", note: "Маттерхорн, Монблан, горные деревни и панорамные поезда" },
+      { name: "Кавказ (Грузия/Россия)", note: "Горы, древние монастыри, колыбель виноделия" },
+      { name: "Регион Кансай (Япония)", note: "Киото и Нара — культурное сердце страны, храмы и сады" }
+    ]
+  },
+  {
+    title: "Топ-7 национальных парков",
+    icon: "🌲",
+    color: "#2f7d4f",
+    items: [
+      { name: "Гранд-Каньон (США)", note: "Каньон реки Колорадо глубиной до 1,8 км" },
+      { name: "Йеллоустоун (США)", note: "Первый национальный парк в мире (1872); гейзеры, горячие источники и супервулканическая кальдера" },
+      { name: "Кратерное озеро (США)", note: "Глубочайшее озеро США, образовалось в кальдере вулкана" },
+      { name: "Торрес-дель-Пайне (Чили)", note: "Гранитные пики посреди патагонской степи" },
+      { name: "Плитвицкие озёра (Хорватия)", note: "Каскад из 16 озёр разных оттенков бирюзы" },
+      { name: "Улуру / Айерс-Рок (Австралия)", note: "Священный для аборигенов монолит в центре пустыни" },
+      { name: "Серенгети (Танзания)", note: "Знаменит ежегодной миграцией миллионов антилоп гну и зебр" }
+    ]
+  },
+  {
+    title: "Топ-7 островов",
+    icon: "🏝️",
+    color: "#2fa39e",
+    items: [
+      { name: "Санторини (Греция)", note: "Белые домики, синие купола и закаты над кальдерой — одно из самых узнаваемых мест в мире" },
+      { name: "Бора-Бора (Французская Полинезия)", note: "Бунгало над водой, эталон тропического рая" },
+      { name: "Мальдивы", note: "Архипелаг из атоллов с прозрачной бирюзовой водой" },
+      { name: "Сокотра (Йемен)", note: "Остров с уникальной флорой, в том числе драконовыми деревьями" },
+      { name: "Остров Пасхи, моаи (Чили)", note: "Знаменит гигантскими каменными статуями моаи" },
+      { name: "Бали (Индонезия)", note: "Остров храмов, рисовых террас и вулканов" },
+      { name: "Мадагаскар", note: "Остров-континент с уникальной флорой и фауной, включая знаменитую Аллею баобабов" }
+    ]
+  },
+  {
+    title: "Топ-7 культовых сооружений",
+    icon: "⭐",
+    color: "#c9a227",
+    items: [
+      { name: "Нойшванштайн (Швангау, Германия)", note: "Замок XIX века, вдохновивший диснеевский Disney Castle" },
+      { name: "Эрмитаж (Санкт-Петербург, Россия)", note: "Один из крупнейших художественных музеев мира" },
+      { name: "Альгамбра (Гранада, Испания)", note: "Мавританский дворцовый комплекс с уникальной резьбой" },
+      { name: "Гора Рашмор (США)", note: "Портреты четырёх президентов США, высеченные в скале" },
+      { name: "Сиднейский оперный театр (Австралия)", note: "Парусообразная крыша — символ современной Австралии" },
+      { name: "Терракотовая армия (Сиань, Китай)", note: "Тысячи глиняных воинов, охранявших гробницу императора" },
+      { name: "Эйяфьядлайёкюдль (Исландия)", note: "Исландский вулкан, знаменит извержением 2010 года" }
+    ]
+  },
+  {
+    title: "Топ-7 крепостей и замков",
+    icon: "🏰",
+    color: "#6b6b6b",
+    items: [
+      { name: "Львиная скала Сигирия (Шри-Ланка)", note: "Крепость на вершине скалы с сохранившимися древними фресками" },
+      { name: "Замок Химэдзи (Химэдзи, Япония)", note: "Лучше всего сохранившийся японский замок эпохи самураев" },
+      { name: "Большое Зимбабве (Зимбабве)", note: "Крупнейшие каменные руины Африки южнее Сахары" },
+      { name: "Мон-Сен-Мишель (Франция)", note: "Аббатство на скалистом острове, окружаемом приливом" },
+      { name: "Мальборкский замок (Польша)", note: "Крупнейший кирпичный замок в мире" },
+      { name: "Эдинбургский замок (Шотландия)", note: "Крепость на вулканической скале в центре Шотландии" },
+      { name: "Красный форт (Дели, Индия)", note: "Могольская крепость, символ Индии" }
+    ]
+  },
+  {
+    title: "Топ-7 природных диковин",
+    icon: "🔮",
+    color: "#b03f8e",
+    items: [
+      { name: "Соляные копи Величка (Польша)", note: "Подземный собор и залы, вырубленные прямо в соли" },
+      { name: "Розовое озеро Ретба (Сенегал)", note: "Розовый цвет воды выражен в основном в сухой сезон" },
+      { name: "Шоколадные холмы (Филиппины)", note: "Сотни одинаковых конических холмов на острове Бохоль" },
+      { name: "Антилопа-Каньон (США)", note: "Знаменитый извилистый слот-каньон с лучами света" },
+      { name: "Линии Наска (Перу)", note: "Гигантские геоглифы в пустыне, видны только с воздуха" },
+      { name: "Йёкюльсаурлоун (Исландия)", note: "Ледниковая лагуна с плавающими айсбергами" },
+      { name: "Дюны Соссусфлей (Намибия)", note: "Красные дюны с мёртвыми деревьями посреди белой глиняной впадины" }
+    ]
+  },
+  {
+    title: "Топ-7 древнейших построек",
+    icon: "🏛️",
+    color: "#8a6d3f",
+    items: [
+      { name: "Мохенджо-Даро (Пакистан)", note: "Включает Великие бани — древний бассейн для ритуальных омовений; открытая археологическая зона, для иностранных туристов в регионе действуют повышенные меры безопасности" },
+      { name: "Кносский дворец (Крит, Греция)", note: "Центр минойской цивилизации, ок. 1900 г. до н.э." },
+      { name: "Карфаген (Тунис)", note: "Цитадель Бирса — историческое ядро древнего Карфагена, сейчас археологическая зона в пригороде города Тунис" },
+      { name: "Персеполь (Иран)", note: "Церемониальная столица Ахеменидской империи" },
+      { name: "Оракул (Дельфы, Греция)", note: "Античное святилище Аполлона в Дельфах" },
+      { name: "Парфенон (Афины, Греция)", note: "Не то же самое место, что Дельфы — около 180 км друг от друга" },
+      { name: "Гёбекли-Тепе (Турция)", note: "Древнейший известный монументальный храмовый комплекс в мире, ок. 9600 г. до н.э. — старше пирамид и Стоунхенджа" }
+    ]
+  },
+  {
+    title: "Топ-7 труднодоступных чудес",
+    icon: "🧭",
+    color: "#2f4d6b",
+    items: [
+      { name: "Дворец Потала (Тибет, Китай)", note: "Тибет, Китай — требуется специальное разрешение на въезд в регион" },
+      { name: "Килва-Кисивани (Танзания)", note: "Остров у побережья Танзании, доступен организованными турами с материка" },
+      { name: "Галапагосские острова (Эквадор)", note: "Вдохновили Дарвина на теорию эволюции" },
+      { name: "Эверест (Непал/Китай)", note: "Вершина доступна только альпинистам; базовый лагерь открыт для туристов" },
+      { name: "Остров Палау (Микронезия)", note: "Знаменит Медузовым озером, где медузы не жалятся" },
+      { name: "Пантанал (Бразилия)", note: "Крупнейшая заболоченная территория на Земле" },
+      { name: "Антарктида", note: "Самое труднодоступное место на планете — требует организованной экспедиции" }
+    ]
+  },
+  {
+    title: "Топ-7 водных чудес",
+    icon: "💧",
+    color: "#2f8ea3",
+    items: [
+      { name: "Ниагарский водопад (США/Канада)", note: "Один из самых мощных водопадов Северной Америки" },
+      { name: "Водопад Виктория (Замбия/Зимбабве)", note: "Крупнейшая в мире водяная завеса, «гремящий дым»" },
+      { name: "Озеро Байкал (Россия)", note: "Глубочайшее и древнейшее озеро на планете" },
+      { name: "Фьорды Норвегии (например, Гейрангер-фьорд)", note: "Ледниковые заливы с отвесными скалами" },
+      { name: "Большой Барьерный риф (Австралия)", note: "Крупнейшая коралловая экосистема на Земле" },
+      { name: "Водопад Анхель (Венесуэла)", note: "Самый высокий непрерывный водопад в мире" },
+      { name: "Пиопиотахи / Милфорд-Саунд (Новая Зеландия)", note: "Один из самых посещаемых фьордов страны" }
+    ]
+  },
+  {
+    title: "Топ-7 гор и вулканов",
+    icon: "🌋",
+    color: "#c1502e",
+    items: [
+      { name: "Везувий (Италия)", note: "Вулкан, уничтоживший Помпеи в 79 году н.э." },
+      { name: "Вулкан Парикутин (Мексика)", note: "Вырос из ровного поля на глазах у людей в 1943 году" },
+      { name: "Килиманджаро (Танзания)", note: "Высочайшая точка Африки" },
+      { name: "Фудзияма (Япония)", note: "Самая известная гора Японии, действующий вулкан" },
+      { name: "Кракатау (Индонезия)", note: "Вулкан, знаменитый катастрофическим извержением 1883 года" },
+      { name: "Тейде (Тенерифе, Испания)", note: "Высочайшая точка Испании, действующий вулкан с уникальным лунным ландшафтом; вершина доступна по канатной дороге" },
+      { name: "Ключевская сопка (Камчатка, Россия)", note: "Крупнейший активный вулкан Евразии" }
+    ]
+  },
+  {
+    title: "Топ-7 геологических чудес",
+    icon: "🪨",
+    color: "#a08560",
+    items: [
+      { name: "Каппадокия (Турция)", note: "Скальные жилища и «сказочные трубы»" },
+      { name: "Чжанъе Данься (Китай)", note: "«Радужные горы» в провинции Ганьсу" },
+      { name: "Мостовая гигантов (Северная Ирландия)", note: "Гексагональные базальтовые колонны на побережье" },
+      { name: "Дуврские скалы (Великобритания)", note: "Белые меловые утёсы над проливом Ла-Манш" },
+      { name: "Памуккале (Турция)", note: "Белоснежные травертиновые террасы с термальной водой" },
+      { name: "Гуйлинь и река Ли (Китай)", note: "Знаменитый карстовый пейзаж с известняковыми пиками" },
+      { name: "Данакильская впадина (Эфиопия)", note: "Один из самых экстремальных ландшафтов на Земле — серные поля, кислотные озёра, лавовые котлы" }
+    ]
+  },
+  {
+    title: "Топ-7 духовных чудес",
+    icon: "🕊️",
+    color: "#8577b5",
+    items: [
+      { name: "Ангкор-Ват (Камбоджа)", note: "Крупнейший в мире религиозный комплекс" },
+      { name: "Мескита (Кордова, Испания)", note: "Мечеть-собор — уникальный памятник религиозного синкретизма" },
+      { name: "Золотой храм (Амритсар, Индия)", note: "Главная святыня сикхизма" },
+      { name: "Боробудур (Индонезия)", note: "Крупнейший буддийский храм в мире" },
+      { name: "Мечеть Хасана II (Касабланка, Марокко)", note: "Одна из крупнейших мечетей мира, стоит прямо у океана" },
+      { name: "Иерусалим", note: "Святой город трёх мировых религий — иудаизма, христианства и ислама" },
+      { name: "Саграда Фамилия (Барселона, Испания)", note: "Знаменитая недостроенная базилика Антонио Гауди" }
+    ]
+  },
+  {
+    title: "Инженерные чудеса современного мира (ASCE+)",
+    icon: "⚙️",
+    color: "#4f6b7d",
+    items: [
+      { name: "Тоннель под Ла-Маншем (Великобритания — Франция)", note: "Подводный тоннель, соединяющий Британию с континентом" },
+      { name: "Дамба Итайпу (Бразилия — Парагвай)", note: "Одна из крупнейших гидроэлектростанций в мире" },
+      { name: "Панамский канал (Панама)", note: "Соединяет Атлантический и Тихий океаны" },
+      { name: "Бурдж-Халифа (Дубай, ОАЭ)", note: "Самое высокое здание в мире (828 м)" },
+      { name: "Мост Акаси-Кайкё (Япония)", note: "Самый длинный подвесной мост в мире" },
+      { name: "Мост Золотые Ворота (Сан-Франциско, США)", note: "Символ Сан-Франциско, десятилетиями был самым длинным подвесным мостом" },
+      { name: "Си-Эн Тауэр (Торонто, Канада)", note: "Более 30 лет была самой высокой телебашней в мире" }
+    ]
+  }
+];
+
+// ============================================================
+// 1. НАСТРОЙКА FIREBASE — вставь сюда свой конфиг из консоли Firebase
+//    (Project settings → General → Your apps → SDK setup and configuration)
+// ============================================================
+const firebaseConfig = {
+  apiKey: "AIzaSyBmUmgnyWK3JVCOpQZQc-e14_IUJw-QsPM",
+  authDomain: "wonders-tracker-d5749.firebaseapp.com",
+  projectId: "wonders-tracker-d5749",
+  storageBucket: "wonders-tracker-d5749.firebasestorage.app",
+  messagingSenderId: "189185203951",
+  appId: "1:189185203951:web:8b6d73229eb8fb7543851a",
+  measurementId: "G-TPBQFSBRKD"
+};
+
+let db = null;
+let firebaseReady = false;
+try {
+  if (firebaseConfig.apiKey !== "ВСТАВЬ_СЮДА") {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    firebaseReady = true;
+  } else {
+    document.getElementById('setupWarning').style.display = 'block';
+  }
+} catch (e) {
+  console.error('Firebase init failed', e);
+  document.getElementById('setupWarning').style.display = 'block';
+}
+
+// ============================================================
+// 2. TELEGRAM WEB APP — получаем данные о пользователе
+// ============================================================
+const tg = window.Telegram ? window.Telegram.WebApp : null;
+if (tg) {
+  tg.ready();
+  tg.expand();
+}
+const tgUser = tg && tg.initDataUnsafe && tg.initDataUnsafe.user ? tg.initDataUnsafe.user : null;
+const myId = tgUser ? String(tgUser.id) : 'local-guest';
+const myName = tgUser ? [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ') : 'Гость';
+const myPhoto = tgUser && tgUser.photo_url ? tgUser.photo_url : '';
+
+// ============================================================
+// 3. Локальное состояние (fallback, если Firebase недоступен)
+// ============================================================
+const container = document.getElementById('sections');
+const STATE_KEY = 'wonders-checklist-' + myId;
+
+function loadLocal() {
+  try {
+    const raw = localStorage.getItem(STATE_KEY);
+    return raw ? JSON.parse(raw) : { checked: {}, completed: {} };
+  } catch (e) { return { checked: {}, completed: {} }; }
+}
+function saveLocal(state) {
+  try { localStorage.setItem(STATE_KEY, JSON.stringify(state)); } catch (e) {}
+}
+
+let localState = loadLocal();
+let checkedState = localState.checked || {};
+let completedSections = localState.completed || {};
+const TOTAL_COUNTABLE = DATA.reduce((acc, s) => acc + s.items.filter(it => !it.excludeFromCount).length, 0);
+
+function countDone(state) {
+  let done = 0;
+  DATA.forEach((section, si) => {
+    section.items.forEach((item, ii) => {
+      if (item.excludeFromCount) return;
+      if (state[si + '_' + ii]) done++;
+    });
+  });
+  return done;
+}
+
+let friends = {};
+
+function renderFriends() {
+  const box = document.getElementById('friendsBox');
+  const entries = Object.entries(friends).filter(([id]) => id !== myId);
+  if (entries.length === 0) { box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  box.innerHTML = '<div class="friends-title">Прогресс друзей</div>' + entries.map(([id, f]) => {
+    const pct = TOTAL_COUNTABLE ? Math.round((f.done || 0) / TOTAL_COUNTABLE * 100) : 0;
+    return '<div class="friend-row">' +
+      '<img class="friend-avatar" src="' + (f.photo || '') + '" alt="">' +
+      '<div class="friend-info"><div class="friend-name" data-name="' + id + '"></div>' +
+      '<div class="friend-bar-outer"><div class="friend-bar-inner" style="width:' + pct + '%"></div></div></div>' +
+      '<div class="friend-pct">' + (f.done || 0) + '/' + TOTAL_COUNTABLE + '</div>' +
+    '</div>';
+  }).join('');
+  entries.forEach(([id, f]) => {
+    const el = box.querySelector('[data-name="' + id + '"]');
+    if (el) el.textContent = f.name || 'Без имени';
+  });
+}
+
+// ============================================================
+// 4. Синхронизация с Firestore
+//    Структура: users/{id} = { checked, completed, name, photo, done, updatedAt }
+//    Каждый пишет только свой документ; читают все документы коллекции users.
+// ============================================================
+async function persistState() {
+  saveLocal({ checked: checkedState, completed: completedSections });
+  if (!firebaseReady || !db) return;
+  try {
+    await db.collection('users').doc(myId).set({
+      checked: checkedState,
+      completed: completedSections,
+      name: myName,
+      photo: myPhoto,
+      done: countDone(checkedState),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  } catch (e) {
+    console.error('Не удалось сохранить в Firestore', e);
+  }
+}
+
+function initFirestoreSync() {
+  if (!firebaseReady || !db) return;
+
+  // Подписка на мой собственный документ (на случай синхронизации с другого устройства)
+  db.collection('users').doc(myId).get().then(snap => {
+    if (snap.exists) {
+      const data = snap.data();
+      checkedState = data.checked || {};
+      completedSections = data.completed || {};
+      saveLocal({ checked: checkedState, completed: completedSections });
+      render();
+    } else {
+      persistState();
+    }
+  });
+
+  // Подписка на всех участников — общий рейтинг прогресса
+  db.collection('users').onSnapshot(qsnap => {
+    qsnap.forEach(doc => {
+      const data = doc.data();
+      friends[doc.id] = { name: data.name || '', photo: data.photo || '', done: data.done || 0 };
+    });
+    renderFriends();
+  }, err => console.error('roster listener error', err));
+}
+
+function keyFor(si, ii) { return si + '_' + ii; }
+function isChecked(si, ii, item) {
+  const k = keyFor(si, ii);
+  if (Object.prototype.hasOwnProperty.call(checkedState, k)) return !!checkedState[k];
+  return !!item.defaultDone;
+}
+
+function updateProgress() {
+  let total = 0, done = 0;
+  DATA.forEach((section, si) => {
+    section.items.forEach((item, ii) => {
+      if (item.excludeFromCount) return;
+      total++;
+      if (isChecked(si, ii, item)) done++;
+    });
+  });
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  document.getElementById('progressBar').style.width = pct + '%';
+  document.getElementById('progressLabel').textContent = done + ' из ' + total + ' отмечено (' + pct + '%)';
+}
+
+function showAchievement(section) {
+  const toast = document.getElementById('achievementToast');
+  document.getElementById('achievementIcon').textContent = section.icon || '🏆';
+  document.getElementById('achievementName').textContent = section.title;
+  toast.classList.add('show');
+  clearTimeout(toast._hideTimer);
+  toast._hideTimer = setTimeout(() => toast.classList.remove('show'), 3800);
+  if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+}
+
+function checkAchievement(si, section, countableItems, doneCount) {
+  const k = 'sec_' + si;
+  const isFull = countableItems.length > 0 && doneCount === countableItems.length;
+  if (isFull && !completedSections[k]) {
+    completedSections[k] = true;
+    persistState();
+    showAchievement(section);
+  } else if (!isFull && completedSections[k]) {
+    delete completedSections[k];
+    persistState();
+  }
+}
+
+function render() {
+  container.innerHTML = '';
+
+  DATA.forEach((section, si) => {
+    const secDiv = document.createElement('div');
+    secDiv.className = 'section';
+    secDiv.style.setProperty('--sec-color', section.color || '#b5813f');
+
+    const countableItems = section.items.filter(it => !it.excludeFromCount);
+    const doneCount = section.items.reduce((acc, item, ii) => {
+      if (item.excludeFromCount) return acc;
+      return acc + (isChecked(si, ii, item) ? 1 : 0);
+    }, 0);
+
+    const isFull = countableItems.length > 0 && doneCount === countableItems.length;
+    if (isFull) secDiv.classList.add('complete');
+
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'section-header';
+
+    const badge = document.createElement('div');
+    badge.className = 'section-badge';
+    badge.textContent = section.icon || '🌍';
+    headerDiv.appendChild(badge);
+
+    const titleWrap = document.createElement('div');
+    titleWrap.className = 'section-titlewrap';
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'section-title';
+    titleEl.textContent = section.title + (isFull ? ' 🏆' : '');
+
+    const countEl = document.createElement('div');
+    countEl.className = 'section-count' + (isFull ? ' complete' : '');
+    countEl.textContent = doneCount + ' / ' + countableItems.length + (isFull ? '  — пройдено!' : '');
+
+    const miniBarOuter = document.createElement('div');
+    miniBarOuter.className = 'mini-bar-outer';
+    const miniBarInner = document.createElement('div');
+    miniBarInner.className = 'mini-bar-inner';
+    miniBarInner.style.width = (countableItems.length ? (doneCount / countableItems.length * 100) : 0) + '%';
+    miniBarOuter.appendChild(miniBarInner);
+
+    titleWrap.appendChild(titleEl);
+    titleWrap.appendChild(countEl);
+    titleWrap.appendChild(miniBarOuter);
+    headerDiv.appendChild(titleWrap);
+    secDiv.appendChild(headerDiv);
+
+    if (section.desc) {
+      const descDiv = document.createElement('div');
+      descDiv.className = 'section-desc';
+      descDiv.textContent = section.desc;
+      secDiv.appendChild(descDiv);
+    }
+
+    const ul = document.createElement('ul');
+    ul.className = 'wonder-list';
+
+    section.items.forEach((item, ii) => {
+      const k = keyFor(si, ii);
+      const li = document.createElement('li');
+      const checkedNow = isChecked(si, ii, item);
+      li.className = 'wonder-item' + (checkedNow ? ' done' : '');
+
+      const row = document.createElement('div');
+      row.className = 'wonder-row';
+
+      const label = document.createElement('label');
+      label.className = 'wonder-label';
+
+      let checkbox = null;
+      if (!item.excludeFromCount) {
+        checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = checkedNow;
+        checkbox.addEventListener('change', () => {
+          checkedState[k] = checkbox.checked;
+          persistState();
+          render();
+          updateProgress();
+          if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+        });
+      }
+
+      const textWrap = document.createElement('span');
+      textWrap.className = 'wonder-text';
+
+      const nameEl = document.createElement('span');
+      nameEl.className = 'wonder-name';
+      nameEl.textContent = item.name;
+      textWrap.appendChild(nameEl);
+
+      if (item.note) {
+        const noteEl = document.createElement('span');
+        noteEl.className = 'wonder-note';
+        noteEl.textContent = item.note;
+        textWrap.appendChild(noteEl);
+      }
+
+      if (checkbox) label.appendChild(checkbox);
+      label.appendChild(textWrap);
+
+      row.appendChild(label);
+      li.appendChild(row);
+      ul.appendChild(li);
+    });
+
+    secDiv.appendChild(ul);
+    container.appendChild(secDiv);
+
+    checkAchievement(si, section, countableItems, doneCount);
+  });
+
+  updateProgress();
+}
+
+render();
+initFirestoreSync();
+</script>
+</body>
+</html>
